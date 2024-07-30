@@ -1,3 +1,6 @@
+import 'package:secure_messenger/helper/helper.dart';
+import 'package:uuid/uuid.dart';
+
 import 'userData.dart';
 
 enum RequestStatus{pending,accepted,rejected}
@@ -5,22 +8,55 @@ enum RequestStatus{pending,accepted,rejected}
 typedef Requests = List<RequestData>;
 
 class RequestData {
-  final UserData sender;
-  final UserData receiver;
-  final String sent;
-  final bool seen;
+  String id = "";
+  final UserData? user;
+  final DateTime sent;
   final RequestStatus status;
 
-  const RequestData({required this.sender,required this.receiver,required this.sent,required this.seen,required this.status});
+  RequestData({String id = "",required this.user,required this.sent,required this.status}) {
+    if(id == "") {
+      this.id = const Uuid().v4();
+    }else {
+      this.id = id;
+    }
 
-  RequestData copyWith({UserData? sender,UserData? receiver,String? sent,bool? seen,RequestStatus? status}) {
+  }
+
+  RequestData copyWith({RequestStatus? status}) {
     return RequestData(
-        sender: sender ?? this.sender,
-        receiver: receiver ?? this.receiver,
-        sent: sent ?? this.sent,
-        seen: seen ?? this.seen,
+        id: id,
+        user: user,
+        sent: sent,
         status: status ?? this.status
     );
+
+  }
+
+  Map<String,dynamic> toDb() {
+    return {
+      'id':id,
+      'user':user!.id,
+      'sent':Helper.timestampToDb(sent),
+      'status': statusToString(status),
+    };
+
+  }
+
+  static RequestStatus statusFromString(String s) {
+    switch(s) {
+      case "pending": return RequestStatus.pending;
+      case "accepted": return RequestStatus.accepted;
+      default: return RequestStatus.rejected;
+    }
+
+  }
+
+  static String statusToString(RequestStatus s) {
+    switch(s) {
+      case RequestStatus.pending: return "pending";
+      case RequestStatus.accepted: return "accepted";
+      default: return "rejected";
+    }
 
   }
 

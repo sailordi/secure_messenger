@@ -13,20 +13,25 @@ class UserModel {
   Rooms rooms;
   String roomId;
   RoomData? room;
-  Requests requests;
+  Requests sentRequests;
+  Requests receivedRequests;
 
-  UserModel({required this.data,required this.contacts,required this.selectedUser,required this.requests,required this.rooms,required this.roomId,required this.room});
+  UserModel({required this.data,required this.contacts,
+        required this.selectedUser,required this.sentRequests,
+        required this.receivedRequests,required this.rooms,required this.roomId,
+        required this.room});
 
-  UserModel.empty() : data = UserData.empty(),contacts = [],selectedUser = null,requests = [],rooms = [],roomId ="",room = null;
+  UserModel.empty() : data = UserData.empty(),contacts = [],selectedUser = null,sentRequests = [],receivedRequests = [],rooms = [],roomId ="",room = null;
 
-  UserModel.fresh({required this.data,required this.contacts,required this.requests,required this.rooms}) : selectedUser = null,roomId = "",room = null;
+  UserModel.fresh({required this.data,required this.contacts,required this.sentRequests,required this.receivedRequests,required this.rooms}) : selectedUser = null,roomId = "",room = null;
 
-  UserModel copyWith({UserData? data,Users? contacts,Messages? messages,UserData? selectedUser,Requests? requests,Rooms? rooms,String? roomId,RoomData? room}) {
+  UserModel copyWith({UserData? data,Users? contacts,Messages? messages,UserData? selectedUser,Requests? sentRequests,Requests? receivedRequests,Rooms? rooms,String? roomId,RoomData? room}) {
     return UserModel(
         data: data ?? this.data,
         contacts: contacts ?? this.contacts,
         selectedUser: selectedUser ?? this.selectedUser,
-        requests: requests ?? this.requests,
+        sentRequests: sentRequests ?? this.sentRequests,
+        receivedRequests: receivedRequests ?? this.receivedRequests,
         rooms: rooms ?? this.rooms,
         roomId: roomId ?? this.roomId,
         room: room ?? this.room

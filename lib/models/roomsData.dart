@@ -3,9 +3,9 @@ import 'userData.dart';
 typedef Rooms = List<RoomsData>;
 
 class RoomsData {
-  String id;
-  UserData? otherUser;
-  int numberOfMessages;
+  final String id;
+  final UserData? otherUser;
+  final int numberOfMessages;
 
   RoomsData({required this.id,required this.otherUser,required this.numberOfMessages});
 
