@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -18,7 +19,7 @@ import 'firebase/base.dart';
 class FirebaseAdapter {
   final Base base = Base();
 
-  Future<void> register(String userName,String email,String password,File? image) async {
+  Future<void> register(String userName,String email,String password,File? image,String pubicKey,String privateKey) async {
     try {
       UserCredential c = await base.auth.createUserWithEmailAndPassword(email: email,password: password);
       String id = c.user!.uid;
@@ -37,6 +38,10 @@ class FirebaseAdapter {
       }
 
       var u = UserData.fresh(id: id,userName: userName,email: email,profilePicUrl: imageUrl);
+      var data = u.toDb();
+
+      data["pubKey"] = pubicKey;
+      data["enKey"] = privateKey;
 
       base.users.doc(id).set(u.toDb() );
 
@@ -59,26 +64,18 @@ class FirebaseAdapter {
     await base.auth.signOut();
   }
 
-  Future<void> sendMessage(String roomId,MessageData m) async {
-    var messageR = base.messages(roomId);
+  Future<void> sendMessage(MessageData m) async {
+    var messageR = base.messages(m.roomId);
 
      await messageR.doc(m.id).set(m.toDb() );
   }
 
-  Future<void> sendRequest(RequestData r,String toId) async{
-    var sentRequestR = base.sentRequests(r.user!.id);
-    var receivedRequestR = base.receivedRequests(toId);
-    WriteBatch b = base.batch();
-
-      b.set(sentRequestR.doc(r.id),{"id":toId});
-      b.set(receivedRequestR.doc(r.id),r.toDb()  );
-
-      await base.batchCommit(b);
-
+  Future<void> sendRequest(RequestData r) async{
+    await base.requests.doc(r.id).set(r.toDb() );
   }
 
   Future<void> createRoom(RoomData r) async {
-    String userId = base.auth.currentUser!.uid;
+    String userId = base.userId;
     String otherId = r.otherUser!.id;
 
     var q = await FirebaseFirestore.instance.collectionGroup("members")
@@ -93,7 +90,7 @@ class FirebaseAdapter {
         var type = RoomData.typeFromString(SteganographyAdapter.decodeMessage(data["id"]) );
 
         if(type == r.type) {
-          throw "Error: Already have a chat of this type with this user";
+          throw MyError("Error: Already have a chat of this type with this user");
         }
 
       }
@@ -105,27 +102,82 @@ class FirebaseAdapter {
       });
       b.set(base.roomMembers(r.id,).doc(userId),{"id":userId});
       b.set(base.roomMembers(r.id,).doc(otherId),{"id":otherId});
+      b.set(base.typingInProgress.doc(),{"room":r.id,"user":userId,"typing":false});
+      b.set(base.typingInProgress.doc(),{"room":r.id,"user":otherId,"typing":false});
 
       await base.batchCommit(b);
   }
 
-  Future<UserModel> getYourData() async {
-    var data = await getUser(base.auth.currentUser!.uid);
+  Future<void> updateRequest(RequestData r,{bool addFriend = false}) async {
+    String userId = base.userId;
+    String friedId = r.sender!.id;
+    var receivedRequestR = base.receivedRequests(userId);
+    WriteBatch b = base.batch();
+
+      b.update(receivedRequestR.doc(r.id),{"status":RequestData.statusToString(r.status)});
+
+      if(addFriend) {
+        b.set(base.contacts(userId).doc(friedId),{"id":friedId});
+        b.set(base.contacts(friedId).doc(userId),{"id":userId});
+      }
+
+      await base.batchCommit(b);
+  }
+
+  Future<void> updateTypingInProgress(RoomData r,bool typing) async {
+    String userId = base.userId;
+
+      var q = await base.typingInProgress
+              .where("room",isEqualTo: r.id)
+              .where("user",isEqualTo: userId)
+              .get();
+      var b = base.batch();
+
+      for(var doc in q.docs) {
+        doc.reference.update({"typing":typing});
+      }
+
+      await base.batchCommit(b);
+  }
+
+  Future<void> updateMessage(MessageData m) async {
+    var messageR = base.messages(m.roomId);
+
+      await messageR.doc(m.id).update({
+        "edited":Helper.timestampToDb(m.edited!),
+        "message":m.message,
+        "seen":false
+      });
+  }
+
+  Future<void> deleteMessage(MessageData m) async {
+    await base.messages(m.roomId).doc(m.id).delete();
+  }
+
+  Future<(UserModel,(String,String))> getYourData() async {
+    var doc = await base.users.doc(base.userId).get();
+    var docData = doc.data() as Map<String, dynamic>;
+    var data = UserData.fromDb(docData);
+    String pubKey = docData["pubKey"];
+    String privKey = docData["enKey"];
 
     Users contacts = await getContacts();
     Rooms rooms = await getRooms();
 
     var requests = await Future.wait([
-      getRequests(sent: true),
-      getRequests(sent: false),
+      getRequests(data,sent: true),
+      getRequests(data,sent: false),
     ]);
 
-    return UserModel.fresh(data: data,contacts: contacts,sentRequests: requests.first,receivedRequests: requests.last,rooms: rooms);
+    return (
+            UserModel.fresh(data: data,contacts: contacts,sentRequests: requests.first,receivedRequests: requests.last,rooms: rooms),
+            (pubKey,privKey)
+          );
   }
 
   Future<Users> getContacts() async {
     Users ret = [];
-    String userId = base.auth.currentUser!.uid;
+    String userId = base.userId;
     var contactIds = await base.contacts(userId).get();
 
       for(var doc in contactIds.docs) {
@@ -138,7 +190,7 @@ class FirebaseAdapter {
 
   Future<Rooms> getRooms() async {
     Rooms ret = [];
-    String userId = base.auth.currentUser!.uid;
+    String userId = base.userId;
     var memberDocs = await FirebaseFirestore.instance.collectionGroup("members")
         .where("id",isNotEqualTo: userId)
         .get();
@@ -171,7 +223,7 @@ class FirebaseAdapter {
   }
 
   Future<RoomData> getRoom(String roomId) async {
-    var userId = base.auth.currentUser!.uid;
+    var userId = base.userId;
     var membersIds = await base.roomMembers(roomId).get();
     var doc = await base.rooms.doc(roomId).get();
     UserData? otherUser;
@@ -196,7 +248,7 @@ class FirebaseAdapter {
 
   Future<Messages> getMessages(String roomId) async {
     Messages ret = [];
-    String userId = base.auth.currentUser!.uid;
+    String userId = base.userId;
     var q = await base.messages(roomId).get();
     WriteBatch b = base.batch();
 
@@ -216,44 +268,32 @@ class FirebaseAdapter {
       return ret;
   }
 
-  Future<Requests> getRequests({required bool sent}) async {
-    String userId = base.auth.currentUser!.uid;
+  Future<Requests> getRequests(UserData user,{required bool sent}) async {
+    String userId = user.id;
     Requests ret = [];
+    QuerySnapshot q;
 
     if(sent) {
-      var sentReqIds = await base.sentRequests(userId).get();
-
-      for(var doc in sentReqIds.docs) {
-        var reqId = doc.id;
-        var data = doc.data() as Map<String,dynamic>;
-        var sentTo = data['id'];
-
-        var doc2 = await base.sentRequests(sentTo).doc(reqId).get();
-
-        data = doc2.data() as Map<String,dynamic>;
-
-        var reqUserId = data['user'];
-        var sent = Helper.timestampFromDb(data["sent"]);
-        var status = RequestData.statusFromString(data["status"]);
-
-        var user = await getUser(reqUserId);
-
-        ret.add(RequestData(id:reqId,user: user,sent: sent,status: status) );
-      }
+      q = await base.requests.where("sender",isEqualTo:userId).get();
     } else {
-      var receivedReq = await base.receivedRequests(userId).get();
+      q = await base.requests.where("receiver",isEqualTo:userId).get();
+    }
 
-      for(var doc in receivedReq.docs) {
-        var reqId = doc.id;
-        var data = doc.data() as Map<String,dynamic>;
+    for(var doc in q.docs) {
+      var reqId = doc.id;
+      var data = doc.data() as Map<String,dynamic>;
 
-        var reqUserId = data['user'];
-        var sent = Helper.timestampFromDb(data["sent"]);
-        var status = RequestData.statusFromString(data["status"]);
+      var senderId = data['sender'];
+      var receiverId = data['receiver'];
+      var sentDateTime = Helper.timestampFromDb(data["sent"]);
+      var status = RequestData.statusFromString(data["status"]);
 
-        var user = await getUser(reqUserId);
+      UserData otherUser = (sent) ? await getUser(receiverId) : await getUser(senderId);
 
-        ret.add(RequestData(id:reqId,user: user,sent: sent,status: status) );
+      if(sent) {
+        ret.add(RequestData(id:reqId,sender: user,receiver: otherUser,sent: sentDateTime,status: status) );
+      }else {
+        ret.add(RequestData(id:reqId,sender: otherUser,receiver: user,sent: sentDateTime,status: status) );
       }
 
     }
@@ -265,6 +305,39 @@ class FirebaseAdapter {
     var doc = await base.users.doc(userId).get();
 
       return UserData.fromDb(doc.data() as Map<String, dynamic>);
+  }
+
+  StreamSubscription contactsStream(void Function() contacts) {
+    String userId = base.userId;
+
+      return base.contacts(userId).snapshots(includeMetadataChanges: false)
+                    .listen((event) { contacts(); } );
+  }
+
+  StreamSubscription requestStream({required bool sent,required UserData user,required void Function(UserData,bool) requestChange}) {
+    String userId = base.userId;
+
+    if(sent) {
+      return base.requests.where("sender",isEqualTo:userId).snapshots(includeMetadataChanges: false).listen( (event) {
+        requestChange(user,sent);
+      });
+    }else {
+      return base.requests.where("receiver",isEqualTo:userId).snapshots(includeMetadataChanges: false).listen( (event) {
+        requestChange(user,sent);
+      });
+    }
+
+  }
+
+  StreamSubscription messageStream(RoomData r,void Function(String) messages) {
+    return base.messages(r.id).snapshots(includeMetadataChanges: false)
+                .listen( (event) { messages(r.id); } );
+  }
+
+  StreamSubscription typingStream(String userId,RoomData r,void Function() typing) {
+    return base.typingInProgress.where("room",isEqualTo: r.id)
+              .where("user",isNotEqualTo: userId).snapshots()
+              .listen( (event) { typing(); } );
   }
 
 }

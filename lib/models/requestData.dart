@@ -9,11 +9,12 @@ typedef Requests = List<RequestData>;
 
 class RequestData {
   String id = "";
-  final UserData? user;
+  final UserData? sender;
+  final UserData? receiver;
   final DateTime sent;
   final RequestStatus status;
 
-  RequestData({String id = "",required this.user,required this.sent,required this.status}) {
+  RequestData({String id = "",required this.sender,required this.receiver,required this.sent,required this.status}) {
     if(id == "") {
       this.id = const Uuid().v4();
     }else {
@@ -25,7 +26,8 @@ class RequestData {
   RequestData copyWith({RequestStatus? status}) {
     return RequestData(
         id: id,
-        user: user,
+        sender: sender,
+        receiver: receiver,
         sent: sent,
         status: status ?? this.status
     );
@@ -35,7 +37,8 @@ class RequestData {
   Map<String,dynamic> toDb() {
     return {
       'id':id,
-      'user':user!.id,
+      'sender':sender!.id,
+      'receiver':receiver!.id,
       'sent':Helper.timestampToDb(sent),
       'status': statusToString(status),
     };

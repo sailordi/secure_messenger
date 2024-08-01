@@ -8,24 +8,26 @@ import 'package:pointycastle/export.dart';
 import 'package:pointycastle/src/platform_check/platform_check.dart';
 
 class EncryptionAdapter {
+  late AsymmetricKeyPair<RSAPublicKey,RSAPrivateKey> _keys;
 
-  String encrypt({required String text,required RSAPublicKey key})  {
-    final eng = RSAEngine()..init(true,PublicKeyParameter<RSAPublicKey>(key) );
-
-    final processed = eng.process(Uint8List.fromList(text.codeUnits) );
-
-      return String.fromCharCode(processed as int);
-  }
-
-  String decrypt({required String text,required RSAPrivateKey key}) {
-    final eng = RSAEngine()..init(false,PrivateKeyParameter<RSAPrivateKey>(key) );
+  String encrypt(String text)  {
+    final eng = RSAEngine()..init(true,PublicKeyParameter<RSAPublicKey>(_keys.publicKey) );
 
     final processed = eng.process(Uint8List.fromList(text.codeUnits) );
 
       return String.fromCharCode(processed as int);
   }
 
-  String encryptPrivateKey(RSAPrivateKey key) {
+  String decrypt(String text) {
+    final eng = RSAEngine()..init(false,PrivateKeyParameter<RSAPrivateKey>(_keys.privateKey) );
+
+    final processed = eng.process(Uint8List.fromList(text.codeUnits) );
+
+      return String.fromCharCode(processed as int);
+  }
+
+  String encryptPrivateKey() {
+    RSAPrivateKey key = _keys.privateKey;
     final version = ASN1Integer(BigInt.from(0) );
 
     final algorithmSeq = ASN1Sequence();
@@ -70,7 +72,8 @@ class EncryptionAdapter {
       return base64.encode(topLevelSeq.encodedBytes);
   }
 
-  String encryptPublicKey(RSAPublicKey key) {
+  String encryptPublicKey() {
+    RSAPublicKey key = _keys.publicKey;
     final algorithmSeq = ASN1Sequence();
 
     final algorithmAsn1Obj = ASN1Object.fromBytes(
@@ -98,7 +101,14 @@ class EncryptionAdapter {
       return base64.encode(topLevelSeq.encodedBytes);
   }
 
-  RSAPrivateKey decodePrivateKey(String key) {
+  void decodeKeys((String,String) keys) {
+     _keys = AsymmetricKeyPair<RSAPublicKey,RSAPrivateKey>(
+         _decodePublicKey(keys.$1),
+         _decodePrivateKey(keys.$2)
+     );
+  }
+
+  RSAPrivateKey _decodePrivateKey(String key) {
     Uint8List decoded =  base64.decode(key);
     var asn1Parser = ASN1Parser(decoded);
     final topLevelSeq = asn1Parser.nextObject() as ASN1Sequence;
@@ -122,7 +132,7 @@ class EncryptionAdapter {
     return rsaPrivateKey;
   }
 
-  RSAPublicKey decodePublicKey(String key) {
+  RSAPublicKey _decodePublicKey(String key) {
     Uint8List decoded =  base64.decode(key);
     final asn1Parser = ASN1Parser(decoded);
     final topLevelSeq = asn1Parser.nextObject() as ASN1Sequence;
@@ -155,22 +165,22 @@ class EncryptionAdapter {
       return iv;
   }
 
-  AsymmetricKeyPair<RSAPublicKey,RSAPrivateKey> generateKeyPair(SecureRandom secureRandom,{int bitLength = 2048}) {
+  void generateKeyPair({int bitLength = 2048}) {
     final keyGen = RSAKeyGenerator();
 
     keyGen.init(ParametersWithRandom(
       RSAKeyGeneratorParameters(BigInt.parse('65537'),bitLength,64),
-      secureRandom,
+      _generateSecureRandom(),
     ) );
     final pair = keyGen.generateKeyPair();
 
     final myPublic = pair.publicKey as RSAPublicKey;
     final myPrivate = pair.privateKey as RSAPrivateKey;
 
-    return AsymmetricKeyPair<RSAPublicKey, RSAPrivateKey>(myPublic, myPrivate);
+    _keys = AsymmetricKeyPair<RSAPublicKey, RSAPrivateKey>(myPublic, myPrivate);
   }
 
-  SecureRandom generateSecureRandom() {
+  SecureRandom _generateSecureRandom() {
     final secureRandom = SecureRandom('Fortuna')..seed(
           KeyParameter(Platform.instance.platformEntropySource().getBytes(32) ) );
 

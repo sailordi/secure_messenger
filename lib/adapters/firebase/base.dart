@@ -9,6 +9,10 @@ class Base {
   final FirebaseStorage storage = FirebaseStorage.instance;
   final CollectionReference users = FirebaseFirestore.instance.collection("users");
   final CollectionReference rooms = FirebaseFirestore.instance.collection("rooms");
+  final CollectionReference requests = FirebaseFirestore.instance.collection("requests");
+  final CollectionReference typingInProgress = FirebaseFirestore.instance.collection("typingInProgress");
+
+  String get userId => auth.currentUser!.uid;
 
   WriteBatch batch() { return FirebaseFirestore.instance.batch(); }
 
