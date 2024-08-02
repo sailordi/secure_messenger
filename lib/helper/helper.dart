@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
 import 'dart:async';
-import 'package:flutter/services.dart' show rootBundle;
-import 'package:path_provider/path_provider.dart';
+import 'package:mime/mime.dart';
 
 class Helper {
   
@@ -54,5 +53,18 @@ class Helper {
 
     return DateTime.utc(year, month, day, hour, minute, second);
   }
+
+  static Future<bool> isVideoFile(File file) async {
+    final mimeType = lookupMimeType(file.path);
+
+    return mimeType != null && mimeType.startsWith('video/');
+  }
+
+  static Future<bool> isImageFile(File file) async {
+    final mimeType = lookupMimeType(file.path);
+
+    return mimeType != null && mimeType.startsWith('image/');
+  }
+
 
 }

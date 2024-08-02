@@ -4,13 +4,15 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:secure_messenger/adapters/steganographyAdapter.dart';
-import 'package:secure_messenger/models/roomData.dart';
+import 'package:path/path.dart' as path;
 
+import 'encryptionAdapter.dart';
+import 'steganographyAdapter.dart';
 import '../helper/helper.dart';
 import '../models/messageData.dart';
 import '../models/myError.dart';
 import '../models/requestData.dart';
+import '../models/roomData.dart';
 import '../models/roomsData.dart';
 import '../models/userData.dart';
 import '../models/userModel.dart';
@@ -43,7 +45,7 @@ class FirebaseAdapter {
       data["pubKey"] = pubicKey;
       data["enKey"] = privateKey;
 
-      base.users.doc(id).set(u.toDb() );
+      base.users.doc(id).set(data);
 
     } on FirebaseAuthException catch(e) {
       throw MyError(e.code);
@@ -64,10 +66,57 @@ class FirebaseAdapter {
     await base.auth.signOut();
   }
 
-  Future<void> sendMessage(MessageData m) async {
+  Future<void> sendMessage(MessageData m,File? f,FileType? t,{required EncryptionAdapter? enA}) async {
     var messageR = base.messages(m.roomId);
+    Map<String,dynamic> data = {
+      "id":m.id,
+      "sender":m.sender.id,
+      "sent":Helper.timestampToDb(m.sent),
+      "edited":null,
+      "status":MessageData.statusToString(MessageStatus.unread),
+      "fileUrl":null,
+      "fileName":null,
+      "fileType":null,
+      "message":null
+    };
 
-     await messageR.doc(m.id).set(m.toDb() );
+      if(f != null) {
+        Reference ref;
+        UploadTask uploadTask;
+
+        if(t! == FileType.image) {
+          ref = base.storage.ref().child("video").child(m.roomId).child(m.sender.id);
+        } else {
+          ref = base.storage.ref().child("image").child(m.roomId).child(m.sender.id);
+        }
+
+        String fileName = path.basename(f.path);
+        String fileUrl = "";
+
+        if(enA == null) {
+          uploadTask = ref.putFile(f);
+          final taskSnapshot = await uploadTask.whenComplete(() {});
+          fileUrl = await taskSnapshot.ref.getDownloadURL();
+        }else {
+          uploadTask = ref.putData(await enA.encryptFile(f) );
+          final taskSnapshot = await uploadTask.whenComplete(() {});
+          fileUrl = await taskSnapshot.ref.getDownloadURL();
+        }
+
+        data["fileUrl"] = (enA == null) ? fileUrl : enA.encryptText(fileUrl);
+        data["fileName"] = (enA == null) ? fileName : enA.encryptText(fileName);
+      }
+
+      if(t != null) {
+        String type = MessageData.fileTypeToString(t);
+        data["fileType"] = (enA == null) ? type : enA.encryptText(type);
+      }
+
+      if(m.message != null) {
+        data["message"] = (enA == null) ? m.message! : enA.encryptText(m.message!);
+      }
+
+     await messageR.doc(m.id).set(data);
   }
 
   Future<void> sendRequest(RequestData r) async{
@@ -108,6 +157,18 @@ class FirebaseAdapter {
       await base.batchCommit(b);
   }
 
+  Future<void> updateTypingInProgress(String userId,String roomId,bool typing) async {
+    var q = await base.typingInProgress
+                .where("room",isEqualTo: roomId)
+                .where("user",isNotEqualTo: userId)
+                .get();
+
+      for(var doc in q.docs) {
+        await doc.reference.update({"typing":typing});
+      }
+
+  }
+
   Future<void> updateRequest(RequestData r,{bool addFriend = false}) async {
     String userId = base.userId;
     String friedId = r.sender!.id;
@@ -124,33 +185,80 @@ class FirebaseAdapter {
       await base.batchCommit(b);
   }
 
-  Future<void> updateTypingInProgress(RoomData r,bool typing) async {
-    String userId = base.userId;
+  Future<void> updateMessage(MessageData m,File? f,FileType? t,EncryptionAdapter? enA,{bool remove = false}) async {
+    var messageR = base.messages(m.roomId);
+      Map<String,dynamic> data = {
+        "edited":Helper.timestampToDb(m.edited!),
+        "status":MessageData.statusToString(MessageStatus.unread),
+      };
 
-      var q = await base.typingInProgress
-              .where("room",isEqualTo: r.id)
-              .where("user",isEqualTo: userId)
-              .get();
-      var b = base.batch();
+      if(f == null && remove == true) {
+        if(m.fileUrl != null) {
+          Reference ref = base.storage.refFromURL(m.fileUrl!);
 
-      for(var doc in q.docs) {
-        doc.reference.update({"typing":typing});
+          await ref.delete();
+        }
+
+        data["fileUrl"] = null;
+        data["fileName"] = null;
+        data["fileType"] = null;
       }
 
-      await base.batchCommit(b);
-  }
+      if(f != null) {
+        Reference ref;
+        UploadTask uploadTask;
 
-  Future<void> updateMessage(MessageData m) async {
-    var messageR = base.messages(m.roomId);
+          if(m.fileUrl != null) {
+            ref = base.storage.refFromURL(m.fileUrl!);
 
-      await messageR.doc(m.id).update({
-        "edited":Helper.timestampToDb(m.edited!),
-        "message":m.message,
-        "seen":false
-      });
+            await ref.delete();
+          }
+
+          if(t! == FileType.image) {
+            ref = base.storage.ref().child("video").child(m.roomId).child(m.sender.id);
+          } else {
+            ref = base.storage.ref().child("image").child(m.roomId).child(m.sender.id);
+          }
+
+          String fileName = path.basename(f.path);
+          String fileUrl;
+
+          if(enA == null) {
+            uploadTask = ref.putFile(f);
+            final taskSnapshot = await uploadTask.whenComplete(() {});
+            fileUrl = await taskSnapshot.ref.getDownloadURL();
+          }else {
+            uploadTask = ref.putData(await enA.encryptFile(f) );
+            final taskSnapshot = await uploadTask.whenComplete(() {});
+            fileUrl = await taskSnapshot.ref.getDownloadURL();
+          }
+
+          data["fileUrl"] = (enA == null) ? fileUrl : enA.encryptText(fileUrl);
+          data["fileName"] = (enA == null) ? fileName : enA.encryptText(fileName);
+
+        if(t != null) {
+          String type = MessageData.fileTypeToString(t);
+          data["fileType"] = (enA == null) ? type : enA.encryptText(type);
+        }
+
+      }
+
+      if(m.message == null) {
+        data["message"] = null;
+      } else {
+        data["message"] = (enA == null) ? m.message! : enA.encryptText(m.message!);
+      }
+
+      await messageR.doc(m.id).update(data);
   }
 
   Future<void> deleteMessage(MessageData m) async {
+    if(m.fileUrl != null) {
+      Reference ref = base.storage.refFromURL(m.fileUrl!);
+
+      await ref.delete();
+    }
+
     await base.messages(m.roomId).doc(m.id).delete();
   }
 
@@ -222,18 +330,19 @@ class FirebaseAdapter {
         return ret;
   }
 
-  Future<RoomData> getRoom(String roomId) async {
+  Future<RoomData> getRoom(String roomId,EncryptionAdapter enA) async {
     var userId = base.userId;
     var membersIds = await base.roomMembers(roomId).get();
     var doc = await base.rooms.doc(roomId).get();
     UserData? otherUser;
-    Messages messages = await getMessages(roomId);
 
       var data = doc.data() as Map<String,dynamic>;
 
       var id = data["id"];
       var roomType = RoomData.typeFromString(SteganographyAdapter.decodeMessage(id) );
       id = doc.id;
+
+      Messages messages = await getMessages(roomId,(roomType == RoomType.normal) ? null : enA);
 
       for(var doc2 in membersIds.docs) {
         var otherId = doc2.id;
@@ -246,7 +355,7 @@ class FirebaseAdapter {
       return RoomData(otherUser: otherUser,messages: messages, type: roomType);
   }
 
-  Future<Messages> getMessages(String roomId) async {
+  Future<Messages> getMessages(String roomId,EncryptionAdapter? enA) async {
     Messages ret = [];
     String userId = base.userId;
     var q = await base.messages(roomId).get();
@@ -254,9 +363,39 @@ class FirebaseAdapter {
 
       for(var doc in q.docs) {
         var data = doc.data() as Map<String,dynamic>;
-        var senderId = data['sender'];
 
-        ret.add(MessageData.fromDb(data,await getUser(senderId) ) );
+        var id = data['id'];
+        var senderId = data['sender'];
+        var sent = Helper.timestampFromDb(data['sent']);
+        DateTime? edited = (data['edited'] == null) ? null : Helper.timestampFromDb(data['edited']);
+        MessageStatus status = MessageData.statusFromString(data['status']);
+        var fileUrlV = data["fileUrl"];
+        var fileNameV = data["fileUrl"];
+        var fileTypeV = data["fileUrl"];
+        var messageV = data["message"];
+        String? fileUrl,fileName,message;
+        FileType? fileType;
+
+        if(fileTypeV != null) {
+          var fileTypeStr = (enA == null) ? fileTypeV : enA.decryptText(fileTypeV);
+          fileType = MessageData.fileTypeFromString(fileTypeStr);
+        }
+
+        if(fileUrlV != null) {
+          fileUrl = (enA == null) ? fileUrlV : enA.decryptText(fileUrlV);
+        }
+
+        if(fileNameV != null) {
+          fileName = (enA == null) ? fileNameV : enA.decryptText(fileNameV);
+        }
+
+        if(messageV != null) {
+          message = (enA == null) ? messageV : enA.decryptText(messageV);
+        }
+
+        var sender = await getUser(senderId);
+
+        ret.add(MessageData(roomId: roomId,id: id,sender: sender,sent: sent, edited: edited, message: message, fileUrl: fileUrl,fileName:fileName,fileType: fileType, status: status) );
 
         if(senderId != userId) {
           b.update(doc.reference,{"sent":MessageData.statusToString(MessageStatus.read) });
@@ -305,6 +444,40 @@ class FirebaseAdapter {
     var doc = await base.users.doc(userId).get();
 
       return UserData.fromDb(doc.data() as Map<String, dynamic>);
+  }
+
+  Future<bool> getTyping(String userId,String roodId,bool typing) async {
+    var q = await base.typingInProgress
+        .where("room",isEqualTo: roodId)
+        .where("user",isNotEqualTo: userId)
+        .get();
+
+      for(var doc in q.docs) {
+        var data = doc.data() as Map<String, dynamic>;
+
+        return data["typing"];
+      }
+
+      return false;
+  }
+
+  Future<Users> findUser(String user) async {
+    var q = await Future.wait({
+        base.users.where("email",isEqualTo: user).get(),
+        base.users.where("userName",isEqualTo: user).get(),
+    });
+
+      Users ret = [];
+
+      for(var doc in q.first.docs) {
+        ret.add(await getUser(doc.id) );
+      }
+
+      for(var doc in q.last.docs) {
+        ret.add(await getUser(doc.id) );
+      }
+
+      return ret;
   }
 
   StreamSubscription contactsStream(void Function() contacts) {

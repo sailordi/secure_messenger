@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -10,20 +12,32 @@ import 'package:pointycastle/src/platform_check/platform_check.dart';
 class EncryptionAdapter {
   late AsymmetricKeyPair<RSAPublicKey,RSAPrivateKey> _keys;
 
-  String encrypt(String text)  {
-    final eng = RSAEngine()..init(true,PublicKeyParameter<RSAPublicKey>(_keys.publicKey) );
+  Future<Uint8List> encryptFile(File d) async {
+    var data = await _fileToUint8List(d);
 
-    final processed = eng.process(Uint8List.fromList(text.codeUnits) );
-
-      return String.fromCharCode(processed as int);
+    return _encrypt(data);
   }
 
-  String decrypt(String text) {
+  Uint8List encryptText(String d) {
+    return _encrypt(_textToUint8List(d) );
+  }
+
+  String decryptText(Uint8List data) {
     final eng = RSAEngine()..init(false,PrivateKeyParameter<RSAPrivateKey>(_keys.privateKey) );
 
-    final processed = eng.process(Uint8List.fromList(text.codeUnits) );
+    return _textFromUint8List(eng.process(data) );
+  }
 
-      return String.fromCharCode(processed as int);
+  Uint8List _encrypt(Uint8List data)  {
+    final eng = RSAEngine()..init(true,PublicKeyParameter<RSAPublicKey>(_keys.publicKey) );
+
+      return eng.process(data);
+  }
+
+  Uint8List decrypt(Uint8List data) {
+    final eng = RSAEngine()..init(false,PrivateKeyParameter<RSAPrivateKey>(_keys.privateKey) );
+
+      return eng.process(data);
   }
 
   String encryptPrivateKey() {
@@ -185,6 +199,18 @@ class EncryptionAdapter {
           KeyParameter(Platform.instance.platformEntropySource().getBytes(32) ) );
 
     return secureRandom;
+  }
+
+  static Uint8List _textToUint8List(String d) {
+    return Uint8List.fromList(d.codeUnits);
+  }
+
+  static String _textFromUint8List(Uint8List d) {
+    return String.fromCharCode(d as int);
+  }
+
+  static Future<Uint8List> _fileToUint8List(File d) async {
+    return await d.readAsBytes();
   }
 
 }
