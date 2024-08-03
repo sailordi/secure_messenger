@@ -31,6 +31,7 @@ class UserManager extends StateNotifier<UserModel> {
   Future<void> logIn(String email,String password) async {
     try {
       await firebaseA.login(email, password);
+      await _initData();
     } on MyError catch(e) {
       rethrow;
     }
@@ -77,17 +78,6 @@ class UserManager extends StateNotifier<UserModel> {
     firebaseA.logOut();
   }
 
-  Future<void> init() async{
-    var dataAndKey = await firebaseA.getYourData();
-    UserModel userM = dataAndKey.$1;
-
-    encryptDecryptA.decodeKeys(dataAndKey.$2);
-
-    state = userM;
-
-    _createStreams();
-  }
-
   Future<void> startTyping() async {
     String userId = state.data.id;
     var roomId = state.roomId!;
@@ -116,6 +106,17 @@ class UserManager extends StateNotifier<UserModel> {
     _disposeRoomStreams();
 
     state = state.copyWith(roomId: null,room: null);
+  }
+
+  Future<void> _initData() async{
+    var dataAndKey = await firebaseA.getYourData();
+    UserModel userM = dataAndKey.$1;
+
+    encryptDecryptA.decodeKeys(dataAndKey.$2);
+
+    state = userM;
+
+    _createStreams();
   }
 
   void _createStreams() {
