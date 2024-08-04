@@ -30,14 +30,6 @@ class Base {
     return users.doc(userId).collection("friends");
   }
 
-  CollectionReference sentRequests(String userId) {
-    return users.doc(userId).collection("sentRequests");
-  }
-
-  CollectionReference receivedRequests(String userId) {
-    return users.doc(userId).collection("receivedRequests");
-  }
-
   CollectionReference roomMembers(String roomId) {
     return rooms.doc(roomId).collection("members");
   }

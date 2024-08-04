@@ -108,6 +108,52 @@ class UserManager extends StateNotifier<UserModel> {
     state = state.copyWith(roomId: null,room: null);
   }
 
+  Future<void> findUser(String find) async {
+    if(find.isEmpty) {
+      state = state.copyWith(foundUsers: []);
+    }
+
+    var users =  await firebaseA.findUser(find);
+
+    state = state.copyWith(foundUsers: users);
+  }
+
+  Future<UserData> sendRequest(int index) async {
+    var foundU = state.foundUsers;
+
+    try {
+      await firebaseA.sendRequest(RequestData(sender: state.data, receiver: foundU.elementAt(index) ) );
+    } on String catch(e) {
+      rethrow;
+    }
+
+    return foundU.elementAt(index);
+  }
+
+  Future<UserData> acceptRequest(int index) async {
+    var rec = state.receivedRequests;
+
+      await firebaseA.acceptRequests(rec.elementAt(index) );
+
+      return rec.elementAt(index).sender!;
+  }
+
+  Future<UserData> declineRequest(int index) async {
+    var rec = state.receivedRequests;
+
+      await firebaseA.declineRequests(rec.elementAt(index) );
+
+      return rec.elementAt(index).sender!;
+  }
+
+  Future<UserData> removeContact(int index) async {
+    var contacts = state.contacts;
+
+      await firebaseA.deleteContact(contacts.elementAt(index) );
+
+      return contacts.elementAt(index);
+  }
+
   Future<void> _initData() async{
     var dataAndKey = await firebaseA.getYourData();
     UserModel userM = dataAndKey.$1;
@@ -218,6 +264,11 @@ final sentReqManager = Provider<Requests>((ref) {
 final contactsManager = Provider<Users>((ref) {
   final userModel = ref.watch(userManager);
   return userModel.contacts;
+});
+
+final roomsManager = Provider<Rooms>((ref) {
+  final userModel = ref.watch(userManager);
+  return userModel.rooms;
 });
 
 final messagesManager = Provider<Messages?>((ref) {

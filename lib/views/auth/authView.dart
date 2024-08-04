@@ -2,7 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../helper/routes.dart';
+import '../../adapters/routeAdapter.dart';
 import 'loginView.dart';
 import 'registerView.dart';
 
@@ -30,7 +30,7 @@ class _AuthViewState extends ConsumerState<AuthView> {
 
   void navigate(BuildContext context) async {
     if(context.mounted) {
-      Navigator.pushNamed(context,Routes.rooms() );
+      Navigator.pushNamed(context,RouteAdapter.chats() );
     }
 
   }

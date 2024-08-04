@@ -120,6 +120,31 @@ class FirebaseAdapter {
   }
 
   Future<void> sendRequest(RequestData r) async{
+    var userId = r.sender!.id;
+    var contactId = r.receiver!.id;
+    var contactQ = await base.contacts(userId).where("id",isEqualTo: contactId).get();
+    var requestRecQ = await base.requests
+                          .where("sender",isEqualTo: contactId)
+                          .where("receiver",isEqualTo: userId)
+                          .get();
+    var requestSentQ = await base.requests
+        .where("sender",isEqualTo: userId)
+        .where("receiver",isEqualTo: contactId)
+        .get();
+
+    if (contactQ.docs.isNotEmpty) {
+      var user = await getUser(contactId);
+      throw MyError("Error: ${user.userName}(${user.email}) has already been added as a contact");
+    }
+    if(requestRecQ.docs.isNotEmpty) {
+      var user = await getUser(contactId);
+      throw MyError("Error: You already have received a request from ${user.userName}(${user.email})");
+    }
+    if(requestSentQ.docs.isNotEmpty) {
+      var user = await getUser(contactId);
+      throw MyError("Error: You already have sent a request to ${user.userName}(${user.email})");
+    }
+
     await base.requests.doc(r.id).set(r.toDb() );
   }
 
@@ -157,6 +182,49 @@ class FirebaseAdapter {
       await base.batchCommit(b);
   }
 
+  Future<void> acceptRequests(RequestData r) async {
+    var userId = r.receiver!.id;
+    var contactId = r.sender!.id;
+    var contactQ = await base.contacts(userId).doc(contactId).get();
+    var requestRecQ = await base.requests
+        .where("sender",isEqualTo: contactId)
+        .where("receiver",isEqualTo: userId)
+        .get();
+    var requestSentQ = await base.requests
+        .where("sender",isEqualTo: userId)
+        .where("receiver",isEqualTo: contactId)
+        .get();
+
+    if (contactQ.exists) {
+      var user = await getUser(contactId);
+      throw MyError("Error: ${user.userName}(${user.email}) has already been added as a contact");
+    }
+    if(requestRecQ.docs.isNotEmpty) {
+      var user = await getUser(contactId);
+      throw MyError("Error: You already have received a request from ${user.userName}(${user.email})");
+    }
+    if(requestSentQ.docs.isNotEmpty) {
+      var user = await getUser(contactId);
+      throw MyError("Error: You already have sent a request to ${user.userName}(${user.email})");
+    }
+
+    var requestDoc = await base.requests.doc(r.id).get();
+
+    await requestDoc.reference.delete();
+
+    await Future.wait([
+      base.contacts(userId).doc(contactId).set({"id":contactId}),
+      base.contacts(contactId).doc(userId).set({"id":userId})
+    ]);
+
+  }
+
+  Future<void> declineRequests(RequestData r) async {
+    var requestDoc = await base.requests.doc(r.id).get();
+
+      await requestDoc.reference.delete();
+  }
+
   Future<void> updateTypingInProgress(String userId,String roomId,bool typing) async {
     var q = await base.typingInProgress
                 .where("room",isEqualTo: roomId)
@@ -167,22 +235,6 @@ class FirebaseAdapter {
         await doc.reference.update({"typing":typing});
       }
 
-  }
-
-  Future<void> updateRequest(RequestData r,{bool addFriend = false}) async {
-    String userId = base.userId;
-    String friedId = r.sender!.id;
-    var receivedRequestR = base.receivedRequests(userId);
-    WriteBatch b = base.batch();
-
-      b.update(receivedRequestR.doc(r.id),{"status":RequestData.statusToString(r.status)});
-
-      if(addFriend) {
-        b.set(base.contacts(userId).doc(friedId),{"id":friedId});
-        b.set(base.contacts(friedId).doc(userId),{"id":userId});
-      }
-
-      await base.batchCommit(b);
   }
 
   Future<void> updateMessage(MessageData m,File? f,FileType? t,EncryptionAdapter? enA,{bool remove = false}) async {
@@ -262,6 +314,12 @@ class FirebaseAdapter {
     await base.messages(m.roomId).doc(m.id).delete();
   }
 
+  Future<void> deleteContact(UserData c) async {
+    String userId = base.userId;
+
+      await base.contacts(userId).doc(c.id).delete();
+  }
+
   Future<(UserModel,(String,String))> getYourData() async {
     var doc = await base.users.doc(base.userId).get();
     var docData = doc.data() as Map<String, dynamic>;
@@ -309,6 +367,8 @@ class FirebaseAdapter {
           var roomDoc = await base.rooms.doc(parentId).get();
 
           var roomId = roomDoc.id;
+          var roomData =roomDoc.data() as Map<String, dynamic>;
+          var roomTypeStr = SteganographyAdapter.decodeMessage(roomData["id"]);
           var messagesDocs = await base.messages(roomId).get();
           var messages = messagesDocs.docs.length;
           var members = await base.roomMembers(roomId).get();
@@ -324,7 +384,7 @@ class FirebaseAdapter {
             otherUser = await getUser(otherId);
           }
 
-          ret.add(RoomsData(id: roomId,numberOfMessages: messages,otherUser: otherUser) );
+          ret.add(RoomsData(id: roomId,numberOfMessages: messages,otherUser: otherUser,type: RoomData.typeFromString(roomTypeStr) ) );
         }
 
         return ret;
@@ -424,15 +484,13 @@ class FirebaseAdapter {
 
       var senderId = data['sender'];
       var receiverId = data['receiver'];
-      var sentDateTime = Helper.timestampFromDb(data["sent"]);
-      var status = RequestData.statusFromString(data["status"]);
 
       UserData otherUser = (sent) ? await getUser(receiverId) : await getUser(senderId);
 
       if(sent) {
-        ret.add(RequestData(id:reqId,sender: user,receiver: otherUser,sent: sentDateTime,status: status) );
+        ret.add(RequestData(id:reqId,sender: user,receiver: otherUser) );
       }else {
-        ret.add(RequestData(id:reqId,sender: otherUser,receiver: user,sent: sentDateTime,status: status) );
+        ret.add(RequestData(id:reqId,sender: otherUser,receiver: user) );
       }
 
     }
@@ -467,13 +525,18 @@ class FirebaseAdapter {
         base.users.where("userName",isEqualTo: user).get(),
     });
 
-      Users ret = [];
+    Users ret = [];
+    String userId = base.userId;
 
       for(var doc in q.first.docs) {
+        if(doc.id == userId) { continue; }
+
         ret.add(await getUser(doc.id) );
       }
 
       for(var doc in q.last.docs) {
+        if(doc.id == userId) { continue; }
+
         ret.add(await getUser(doc.id) );
       }
 
