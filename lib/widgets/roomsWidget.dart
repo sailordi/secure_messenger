@@ -1,15 +1,52 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../manager/userManager.dart';
 import '../models/roomData.dart';
 import '../models/roomsData.dart';
 import 'buttonWidget.dart';
 import 'imageWidget.dart';
 
-class RoomsWidget extends StatelessWidget {
+class RoomsWidget extends ConsumerStatefulWidget {
+  final Future<void> Function(int,BuildContext)? chat;
+
+  const RoomsWidget({super.key, this.chat});
+
+  @override
+  ConsumerState<ConsumerStatefulWidget> createState() => _RoomsWidgetState();
+}
+
+class _RoomsWidgetState extends ConsumerState<RoomsWidget> {
+
+  @override
+  Widget build(BuildContext context) {
+    var roomsM = ref.watch(roomsManager);
+
+    return ListView.builder(
+        shrinkWrap: true,
+        itemCount: roomsM.length,
+        itemBuilder: (context,index) {
+          return Column(
+            children: [
+              _RoomsDataWidget(
+                roomsData: roomsM[index],
+                chatRoom: () async { await widget.chat!(index,context); }
+              ),
+              (roomsM.length-1 == index) ? const SizedBox() :
+              const SizedBox(height: 20,)
+            ],
+          );
+        }
+    );
+  }
+
+}
+
+class _RoomsDataWidget extends StatelessWidget {
   final RoomsData roomsData;
   final void Function()? chatRoom;
 
-  const RoomsWidget({super.key,required this.roomsData,this.chatRoom});
+  const _RoomsDataWidget({super.key,required this.roomsData,this.chatRoom});
 
   @override
   Widget build(BuildContext context) {

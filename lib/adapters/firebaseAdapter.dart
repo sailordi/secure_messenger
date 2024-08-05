@@ -213,8 +213,8 @@ class FirebaseAdapter {
     await requestDoc.reference.delete();
 
     await Future.wait([
-      base.contacts(userId).doc(contactId).set({"id":contactId}),
-      base.contacts(contactId).doc(userId).set({"id":userId})
+      base.contacts(userId).doc(contactId).set({"id":contactId,"updated":Helper.timestampToDb(DateTime.now() ) }),
+      base.contacts(contactId).doc(userId).set({"id":userId,"updated":Helper.timestampToDb(DateTime.now() ) })
     ]);
 
   }

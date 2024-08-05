@@ -105,7 +105,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> with SingleTickerProv
     return Column(
       children: [
         Flexible(
-          child: ContactsWidget(remove: _removeContact)
+          child: ContactsWidgetPortfolio(remove: _removeContact)
         )
       ],
     );
