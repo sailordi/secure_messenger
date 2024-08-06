@@ -1,22 +1,80 @@
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:secure_messenger/helper/helper.dart';
 import 'package:secure_messenger/models/myError.dart';
 import 'package:video_player/video_player.dart';
 
+import '../manager/userManager.dart';
 import '../models/messageData.dart';
 
-class MessageWidget extends StatelessWidget {
+class MessagesWidget extends ConsumerStatefulWidget {
+  final String userId;
+  final Future<void> Function(String,MessageData)? edit;
+  final Future<void> Function(bool,MessageData)? typing;
+  final Future<void> Function(MessageData)? delete;
+
+  const MessagesWidget({super.key,required this.userId,required this.edit,required this.delete,this.typing});
+
+  @override
+  ConsumerState<ConsumerStatefulWidget> createState() => _MessagesWidgetState();
+}
+
+class _MessagesWidgetState extends ConsumerState<MessagesWidget> {
+
+  @override
+  Widget build(BuildContext context) {
+    var messagesM = ref.watch(messagesManager);
+
+    return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 30),
+        child: ListView.builder(
+          reverse: true,
+          itemCount: messagesM!.length,
+          itemBuilder: (context,index) {
+            final m = messagesM[index];
+            final isUser = widget.userId != m.sender.id;
+            final alignment =
+            isUser ? Alignment.centerRight : Alignment.centerLeft;
+            final Color bgColor = isUser ? Colors.greenAccent : Colors.lightBlueAccent;
+            const borderRadius = BorderRadius.only(
+              topRight: Radius.circular(10),
+              topLeft: Radius.circular(10),
+              bottomLeft: Radius.circular(10),
+            );
+
+            return _MessageWidget(
+                message: m,
+                alignment: alignment,
+                isCurrentUser: isUser,
+                borderRadius: borderRadius,
+                bgColor: bgColor,
+                edit: widget.edit,
+                typing: widget.typing,
+                delete: widget.delete
+            );
+
+          }
+      )
+    );
+
+  }
+
+}
+
+
+class _MessageWidget extends StatelessWidget {
   final MessageData message;
   final Alignment alignment;
   final bool isCurrentUser;
   final BorderRadius borderRadius;
   final Color bgColor;
   final Future<void> Function(String,MessageData)? edit;
+  final Future<void> Function(bool,MessageData)? typing;
   final Future<void> Function(MessageData)? delete;
 
-  const MessageWidget({
+  const _MessageWidget({
       super.key,
       required this.message,
       required this.alignment,
@@ -24,6 +82,7 @@ class MessageWidget extends StatelessWidget {
       required this.borderRadius,
       required this.bgColor,
       required this.edit,
+      required this.typing,
       required this.delete
     }
   );
@@ -79,7 +138,7 @@ class MessageWidget extends StatelessWidget {
                       ? () => showDialog(
                     context: context,
                     builder: (context) =>
-                        _EditMessageWidget(message:message,edit:edit)
+                        _EditMessageWidget(message:message,edit:edit,typing: typing)
                     ) : null,
                     icon: Icon(
                       Icons.edit,
@@ -120,7 +179,7 @@ class _ImageMessageWidget extends StatelessWidget {
         child: CachedNetworkImage(
           width: 200,
           height: 250,
-          imageUrl: url!,
+          imageUrl: url,
           placeholder: (context, url) => const CircularProgressIndicator(),
           errorWidget: (context, url, error) => const Icon(Icons.error),
         )
@@ -210,15 +269,22 @@ class _TextMessageWidget extends StatelessWidget {
 class _EditMessageWidget extends StatelessWidget {
   final MessageData message;
   final Future<void> Function(String,MessageData)? edit;
-
-  const _EditMessageWidget({super.key,required this.message,required this.edit});
-
+  final Future<void> Function(bool,MessageData)? typing;
+  
+  const _EditMessageWidget({super.key,required this.message,required this.edit,required this.typing});
+  
   @override
   Widget build(BuildContext context) {
     final initialText = message.message!;
     final TextEditingController textEditingController =
-    TextEditingController.fromValue(TextEditingValue(text: initialText));
+    TextEditingController.fromValue(TextEditingValue(text: initialText) );
 
+    if(typing != null) {
+      textEditingController.addListener( () async {
+        await typing!(textEditingController.text.isNotEmpty,message);
+      });
+    }
+    
     return Dialog(
       child: TextField(
         controller: textEditingController,
