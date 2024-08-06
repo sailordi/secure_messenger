@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:secure_messenger/views/chat/chatsView.dart';
 
 import 'firebase_options.dart';
 
 import 'adapters/routeAdapter.dart';
 import 'views/auth/authView.dart';
+import 'views/chat/chatView.dart';
+import 'views/chat/chatsView.dart';
+import 'views/profile/profileView.dart';
 import 'helper/myTheme.dart';
 
 void main() async {
@@ -33,6 +35,8 @@ class MyApp extends ConsumerWidget {
           routes: {
             RouteAdapter.auth(): (context) => const AuthView(),
             RouteAdapter.chats(): (context) => const ChatsView(),
+            RouteAdapter.chat(): (context) => const ChatView(),
+            RouteAdapter.profile(): (context) => const ProfileView(),
           },
           debugShowCheckedModeBanner: false,
         )

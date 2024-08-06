@@ -13,7 +13,6 @@ import '../models/messageData.dart';
 import '../models/myError.dart';
 import '../models/requestData.dart';
 import '../models/roomData.dart';
-import '../models/roomsData.dart';
 import '../models/userData.dart';
 import '../models/userModel.dart';
 import 'firebase/base.dart';
@@ -152,12 +151,25 @@ class FirebaseAdapter {
     String userId = base.userId;
     String otherId = r.otherUser!.id;
 
-    var q = await FirebaseFirestore.instance.collectionGroup("members")
-          .where("id",isNotEqualTo: userId)
-          .where("id",isNotEqualTo: otherId)
+    var q1 = await FirebaseFirestore.instance.collectionGroup("members")
+          .where("users",isEqualTo: "$userId#$otherId")
           .get();
+    var q2 = await FirebaseFirestore.instance.collectionGroup("members")
+        .where("users",isEqualTo: "$otherId#$userId")
+        .get();
 
-      for(var doc in q.docs) {
+      for(var doc in q1.docs) {
+        var parentId = base.parentDocumentId(doc.reference);
+        var roomDoc = await base.rooms.doc(parentId).get();
+        var data = roomDoc.data() as Map<String,dynamic>;
+        var type = RoomData.typeFromString(SteganographyAdapter.decodeMessage(data["id"]) );
+
+        if(type == r.type) {
+          throw MyError("Error: Already have a chat of this type with this user");
+        }
+
+      }
+      for(var doc in q2.docs) {
         var parentId = base.parentDocumentId(doc.reference);
         var roomDoc = await base.rooms.doc(parentId).get();
         var data = roomDoc.data() as Map<String,dynamic>;
@@ -174,8 +186,8 @@ class FirebaseAdapter {
       b.set(base.rooms.doc(r.id),{
         "id":SteganographyAdapter.encodeMessage(r.id,RoomData.typeToString(r.type) ),
       });
-      b.set(base.roomMembers(r.id,).doc(userId),{"id":userId});
-      b.set(base.roomMembers(r.id,).doc(otherId),{"id":otherId});
+      b.set(base.roomMembers(r.id,).doc(userId),{"id":userId,"users":"$userId#$otherId"});
+      b.set(base.roomMembers(r.id,).doc(otherId),{"id":otherId,"users":"$userId#$otherId"});
       b.set(base.typingInProgress.doc(),{"room":r.id,"user":userId,"typing":false});
       b.set(base.typingInProgress.doc(),{"room":r.id,"user":otherId,"typing":false});
 
@@ -369,8 +381,6 @@ class FirebaseAdapter {
           var roomId = roomDoc.id;
           var roomData =roomDoc.data() as Map<String, dynamic>;
           var roomTypeStr = SteganographyAdapter.decodeMessage(roomData["id"]);
-          var messagesDocs = await base.messages(roomId).get();
-          var messages = messagesDocs.docs.length;
           var members = await base.roomMembers(roomId).get();
           UserData? otherUser;
 
@@ -384,13 +394,13 @@ class FirebaseAdapter {
             otherUser = await getUser(otherId);
           }
 
-          ret.add(RoomsData(id: roomId,numberOfMessages: messages,otherUser: otherUser,type: RoomData.typeFromString(roomTypeStr) ) );
+          ret.add(RoomData(id: roomId,otherUser: otherUser,type: RoomData.typeFromString(roomTypeStr) ) );
         }
 
         return ret;
   }
 
-  Future<RoomData> getRoom(String roomId,EncryptionAdapter enA) async {
+  Future<(RoomData,Messages)> getRoom(String roomId,EncryptionAdapter enA) async {
     var userId = base.userId;
     var membersIds = await base.roomMembers(roomId).get();
     var doc = await base.rooms.doc(roomId).get();
@@ -398,9 +408,7 @@ class FirebaseAdapter {
 
       var data = doc.data() as Map<String,dynamic>;
 
-      var id = data["id"];
-      var roomType = RoomData.typeFromString(SteganographyAdapter.decodeMessage(id) );
-      id = doc.id;
+      var roomType = RoomData.typeFromString(SteganographyAdapter.decodeMessage(data["id"]) );
 
       Messages messages = await getMessages(roomId,(roomType == RoomType.normal) ? null : enA);
 
@@ -412,7 +420,7 @@ class FirebaseAdapter {
         otherUser = await getUser(otherId);
       }
 
-      return RoomData(otherUser: otherUser,messages: messages, type: roomType);
+      return (RoomData(id:roomId,otherUser: otherUser, type: roomType),messages);
   }
 
   Future<Messages> getMessages(String roomId,EncryptionAdapter? enA) async {
@@ -547,8 +555,17 @@ class FirebaseAdapter {
     String userId = base.userId;
 
       return base.contacts(userId).snapshots(includeMetadataChanges: false)
-                    .listen((event) { contacts(); } );
+                    .listen( (event) { contacts(); } );
   }
+
+  StreamSubscription chatsStream(void Function() rooms) {
+    String userId = base.userId;
+
+    return FirebaseFirestore.instance.collectionGroup("members")
+        .where("id",isEqualTo: userId).snapshots(includeMetadataChanges: false)
+        .listen( (event) { rooms(); } );
+  }
+
 
   StreamSubscription requestStream({required bool sent,required UserData user,required void Function(UserData,bool) requestChange}) {
     String userId = base.userId;

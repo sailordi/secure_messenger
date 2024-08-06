@@ -3,7 +3,6 @@
 import 'messageData.dart';
 import 'requestData.dart';
 import 'roomData.dart';
-import 'roomsData.dart';
 import 'userData.dart';
 
 class UserModel {
@@ -14,19 +13,20 @@ class UserModel {
   Rooms rooms;
   String? roomId;
   RoomData? room;
+  Messages messages;
   Requests sentRequests;
   Requests receivedRequests;
 
   UserModel({required this.data,required this.contacts,
         required this.foundUsers,required this.selectedUser,required this.sentRequests,
         required this.receivedRequests,required this.rooms,required this.roomId,
-        required this.room});
+        required this.room,required this.messages});
 
-  UserModel.empty() : data = UserData.empty(),contacts = [],selectedUser = null,sentRequests = [],receivedRequests = [],foundUsers = [],rooms = [],roomId = null,room = null;
+  UserModel.empty() : data = UserData.empty(),contacts = [],selectedUser = null,sentRequests = [],receivedRequests = [],foundUsers = [],rooms = [],roomId = null,room = null,messages=[];
 
-  UserModel.fresh({required this.data,required this.contacts,required this.sentRequests,required this.receivedRequests,required this.rooms}) : foundUsers = [],selectedUser = null,roomId = null,room = null;
+  UserModel.fresh({required this.data,required this.contacts,required this.sentRequests,required this.receivedRequests,required this.rooms}) : foundUsers = [],selectedUser = null,roomId = null,room = null,messages = [];
 
-  UserModel copyWith({UserData? data,Users? contacts,Users? foundUsers,UserData? selectedUser,Requests? sentRequests,Requests? receivedRequests,Rooms? rooms,String? roomId,RoomData? room}) {
+  UserModel copyWith({UserData? data,Users? contacts,Users? foundUsers,UserData? selectedUser,Requests? sentRequests,Requests? receivedRequests,Rooms? rooms,String? roomId,RoomData? room,Messages? messages}) {
     return UserModel(
         data: data ?? this.data,
         contacts: contacts ?? this.contacts,
@@ -36,7 +36,8 @@ class UserModel {
         foundUsers: foundUsers ?? this.foundUsers,
         rooms: rooms ?? this.rooms,
         roomId: roomId ?? this.roomId,
-        room: room ?? this.room
+        room: room ?? this.room,
+        messages: messages ?? this.messages
     );
 
   }

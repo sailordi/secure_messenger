@@ -11,7 +11,6 @@ import '../adapters/biometricAuthAdapter.dart';
 import '../adapters/encryptionAdapter.dart';
 import '../adapters/firebaseAdapter.dart';
 import '../adapters/secureStorageAdapter.dart';
-import '../models/roomsData.dart';
 import '../models/userData.dart';
 import '../models/userModel.dart';
 
@@ -21,6 +20,7 @@ class UserManager extends StateNotifier<UserModel> {
   final SecureStorageAdapter storageA = SecureStorageAdapter();
   late EncryptionAdapter encryptDecryptA = EncryptionAdapter();
   StreamSubscription? contactsStream;
+  StreamSubscription? chatsStream;
   StreamSubscription? sentRequestsStream;
   StreamSubscription? receivedRequestsStream;
   StreamSubscription? messageStream;
@@ -92,12 +92,23 @@ class UserManager extends StateNotifier<UserModel> {
       await firebaseA.updateTypingInProgress(userId,roomId,false);
   }
 
-  Future<void> selectRoom(int index) async {
-    RoomsData roomsData = state.rooms.elementAt(index);
-    String roomId = roomsData.id;
-    RoomData room = await firebaseA.getRoom(roomId,encryptDecryptA);
+  Future<void> createRoom(int index,RoomType t) async {
+    Users contacts = state.contacts;
 
-    state = state.copyWith(roomId: roomId,room: room);
+    RoomData r = RoomData(otherUser: contacts[index],type: t);
+
+    state = state.copyWith(roomId: r.id,room: r,messages: []);
+
+    _createRoomStream();
+  }
+
+
+  Future<void> selectRoom(int index) async {
+    RoomData roomsData = state.rooms.elementAt(index);
+    String roomId = roomsData.id;
+    (RoomData,Messages) data = await firebaseA.getRoom(roomId,encryptDecryptA);
+
+    state = state.copyWith(roomId: roomId,room: data.$1,messages: data.$2);
 
     _createRoomStream();
   }
@@ -105,7 +116,7 @@ class UserManager extends StateNotifier<UserModel> {
   Future<void> unselectRoom() async {
     _disposeRoomStreams();
 
-    state = state.copyWith(roomId: null,room: null);
+    state = state.copyWith(roomId: null,room: null,messages: []);
   }
 
   Future<void> findUser(String find) async {
@@ -166,11 +177,18 @@ class UserManager extends StateNotifier<UserModel> {
   }
 
   void _createStreams() {
-    contactsStream = firebaseA.contactsStream(() async {
-      var c = await firebaseA.getContacts();
+    contactsStream = firebaseA.contactsStream( () async {
+        var c = await firebaseA.getContacts();
 
-      state = state.copyWith(contacts: c);
-    }
+        state = state.copyWith(contacts: c);
+      }
+    );
+
+    chatsStream = firebaseA.chatsStream( () async {
+          var r = await firebaseA.getRooms();
+
+          state = state.copyWith(rooms: r);
+      }
     );
 
     receivedRequestsStream = firebaseA.requestStream(
@@ -201,9 +219,7 @@ class UserManager extends StateNotifier<UserModel> {
       var messages = await firebaseA.getMessages(roomId,
                       (room.type == RoomType.normal) ? null : encryptDecryptA);
 
-        room = room.copyWith(messages: messages);
-
-        state = state.copyWith(room: room);
+        state = state.copyWith(messages: messages);
     });
 
     typingStream = firebaseA.typingStream(state.data.id,state.room!,() async {
@@ -216,6 +232,11 @@ class UserManager extends StateNotifier<UserModel> {
     if(contactsStream != null) {
       contactsStream!.cancel();
       contactsStream = null;
+    }
+
+    if(chatsStream != null) {
+      chatsStream!.cancel();
+      chatsStream = null;
     }
 
     if(sentRequestsStream != null) {
@@ -273,7 +294,7 @@ final roomsManager = Provider<Rooms>((ref) {
 
 final messagesManager = Provider<Messages?>((ref) {
   final userModel = ref.watch(userManager);
-  return userModel.room?.messages;
+  return userModel.messages;
 });
 
 final foundUsersManager = Provider<Users>((ref) {

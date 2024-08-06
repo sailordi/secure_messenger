@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../manager/userManager.dart';
 import '../models/roomData.dart';
-import '../models/roomsData.dart';
 import 'buttonWidget.dart';
 import 'imageWidget.dart';
 
@@ -43,7 +42,7 @@ class _RoomsWidgetState extends ConsumerState<RoomsWidget> {
 }
 
 class _RoomsDataWidget extends StatelessWidget {
-  final RoomsData roomsData;
+  final RoomData roomsData;
   final void Function()? chatRoom;
 
   const _RoomsDataWidget({super.key,required this.roomsData,this.chatRoom});

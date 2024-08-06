@@ -5,28 +5,19 @@ import 'userData.dart';
 
 enum RoomType{normal,secure}
 
+typedef Rooms = List<RoomData>;
+
 class RoomData {
   String id = "";
   final UserData? otherUser;
-  final Messages messages;
   final RoomType type;
 
-  RoomData({String id = "",this.otherUser,required this.messages,required this.type}) {
+  RoomData({String id = "",this.otherUser,required this.type}) {
     if(id == "") {
       this.id = const Uuid().v4();
     }else {
       this.id = id;
     }
-
-  }
-
-  RoomData copyWith({UserData? otherUser,Messages? messages}) {
-    return RoomData(
-        id: id,
-        otherUser: otherUser ?? this.otherUser,
-        messages: messages ?? this.messages,
-        type: type
-    );
 
   }
 

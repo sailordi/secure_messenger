@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:secure_messenger/widgets/contactsWidget.dart';
-import 'package:secure_messenger/widgets/roomsWidget.dart';
 import 'package:tab_container/tab_container.dart';
 
 import '../../adapters/routeAdapter.dart';
+import '../../helper/helper.dart';
 import '../../manager/userManager.dart';
+import '../../models/myError.dart';
+import '../../models/roomData.dart';
 import '../../widgets/drawerWidget.dart';
+import '../../widgets/contactsWidget.dart';
+import '../../widgets/roomsWidget.dart';
 
 class ChatsView extends ConsumerStatefulWidget {
   const ChatsView({super.key});
@@ -39,7 +42,15 @@ class _ChatsViewState extends ConsumerState<ChatsView> with SingleTickerProvider
   }
 
   Future<void> _createSecureChat(int index,BuildContext context) async {
-    //TODO create secure chat
+    try {
+      await ref.read(userManager.notifier).createRoom(index,RoomType.secure);
+    }on MyError catch(e) {
+      if(context.mounted) {
+        Helper.messageToUser(e.text, context);
+      }
+      return;
+    }
+
     if(context.mounted) {
       Navigator.pushNamed(context,RouteAdapter.chat() );
     }
@@ -47,7 +58,15 @@ class _ChatsViewState extends ConsumerState<ChatsView> with SingleTickerProvider
   }
 
   Future<void> _createChat(int index,BuildContext context) async {
-    //TODO create chat
+    try {
+      await ref.read(userManager.notifier).createRoom(index,RoomType.normal);
+    }on MyError catch(e) {
+      if(context.mounted) {
+        Helper.messageToUser(e.text, context);
+      }
+      return;
+    }
+
     if(context.mounted) {
       Navigator.pushNamed(context,RouteAdapter.chat() );
     }
