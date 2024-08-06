@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../adapters/imageAdapter.dart';
+import '../../adapters/mediaAdapter.dart';
 import '../../helper/helper.dart';
 import '../../manager/userManager.dart';
 import '../../models/myError.dart';

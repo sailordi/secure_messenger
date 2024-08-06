@@ -102,7 +102,6 @@ class UserManager extends StateNotifier<UserModel> {
     _createRoomStream();
   }
 
-
   Future<void> selectRoom(int index) async {
     RoomData roomsData = state.rooms.elementAt(index);
     String roomId = roomsData.id;
@@ -166,14 +165,19 @@ class UserManager extends StateNotifier<UserModel> {
   }
 
   Future<void> _initData() async{
-    var dataAndKey = await firebaseA.getYourData();
-    UserModel userM = dataAndKey.$1;
+    try {
+      var dataAndKey = await firebaseA.getYourData();
+      UserModel userM = dataAndKey.$1;
 
-    encryptDecryptA.decodeKeys(dataAndKey.$2);
+      encryptDecryptA.decodeKeys(dataAndKey.$2);
 
-    state = userM;
+      state = userM;
 
-    _createStreams();
+      _createStreams();
+    } catch(e) {
+      logOut();
+    }
+
   }
 
   void _createStreams() {

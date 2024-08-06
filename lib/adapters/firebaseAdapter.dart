@@ -74,7 +74,6 @@ class FirebaseAdapter {
       "edited":null,
       "status":MessageData.statusToString(MessageStatus.unread),
       "fileUrl":null,
-      "fileName":null,
       "fileType":null,
       "message":null
     };
@@ -89,21 +88,13 @@ class FirebaseAdapter {
           ref = base.storage.ref().child("image").child(m.roomId).child(m.sender.id);
         }
 
-        String fileName = path.basename(f.path);
         String fileUrl = "";
 
-        if(enA == null) {
-          uploadTask = ref.putFile(f);
-          final taskSnapshot = await uploadTask.whenComplete(() {});
-          fileUrl = await taskSnapshot.ref.getDownloadURL();
-        }else {
-          uploadTask = ref.putData(await enA.encryptFile(f) );
-          final taskSnapshot = await uploadTask.whenComplete(() {});
-          fileUrl = await taskSnapshot.ref.getDownloadURL();
-        }
+        uploadTask = ref.putFile(f);
+        final taskSnapshot = await uploadTask.whenComplete(() {});
+        fileUrl = await taskSnapshot.ref.getDownloadURL();
 
         data["fileUrl"] = (enA == null) ? fileUrl : enA.encryptText(fileUrl);
-        data["fileName"] = (enA == null) ? fileName : enA.encryptText(fileName);
       }
 
       if(t != null) {
@@ -438,10 +429,9 @@ class FirebaseAdapter {
         DateTime? edited = (data['edited'] == null) ? null : Helper.timestampFromDb(data['edited']);
         MessageStatus status = MessageData.statusFromString(data['status']);
         var fileUrlV = data["fileUrl"];
-        var fileNameV = data["fileUrl"];
-        var fileTypeV = data["fileUrl"];
+        var fileTypeV = data["fileType"];
         var messageV = data["message"];
-        String? fileUrl,fileName,message;
+        String? fileUrl,message;
         FileType? fileType;
 
         if(fileTypeV != null) {
@@ -453,17 +443,13 @@ class FirebaseAdapter {
           fileUrl = (enA == null) ? fileUrlV : enA.decryptText(fileUrlV);
         }
 
-        if(fileNameV != null) {
-          fileName = (enA == null) ? fileNameV : enA.decryptText(fileNameV);
-        }
-
         if(messageV != null) {
           message = (enA == null) ? messageV : enA.decryptText(messageV);
         }
 
         var sender = await getUser(senderId);
 
-        ret.add(MessageData(roomId: roomId,id: id,sender: sender,sent: sent, edited: edited, message: message, fileUrl: fileUrl,fileName:fileName,fileType: fileType, status: status) );
+        ret.add(MessageData(roomId: roomId,id: id,sender: sender,sent: sent, edited: edited, message: message, fileUrl: fileUrl,fileType: fileType, status: status) );
 
         if(senderId != userId) {
           b.update(doc.reference,{"sent":MessageData.statusToString(MessageStatus.read) });
