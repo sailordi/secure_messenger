@@ -63,7 +63,6 @@ class _MessagesWidgetState extends ConsumerState<MessagesWidget> {
 
 }
 
-
 class _MessageWidget extends StatelessWidget {
   final MessageData message;
   final Alignment alignment;
@@ -281,7 +280,12 @@ class _EditMessageWidget extends StatelessWidget {
 
     if(typing != null) {
       textEditingController.addListener( () async {
-        await typing!(textEditingController.text.isNotEmpty,message);
+        if(textEditingController.text.isNotEmpty &&
+            textEditingController.text != message.message) {
+          await typing!(true,message);
+        }else {
+          await typing!(false,message);
+        }
       });
     }
     

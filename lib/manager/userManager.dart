@@ -115,7 +115,7 @@ class UserManager extends StateNotifier<UserModel> {
   Future<void> unselectRoom() async {
     _disposeRoomStreams();
 
-    state = state.copyWith(roomId: null,room: null,messages: []);
+    state = state.copyWith(roomId: null,room: null,messages: [],otherUserTyping: false);
   }
 
   Future<void> findUser(String find) async {
@@ -227,7 +227,9 @@ class UserManager extends StateNotifier<UserModel> {
     });
 
     typingStream = firebaseA.typingStream(state.data.id,state.room!,() async {
+      bool otherTyping = await firebaseA.getTyping(state.roomId!);
 
+      state = state.copyWith(otherUserTyping: otherTyping);
     });
 
   }
@@ -305,6 +307,12 @@ final foundUsersManager = Provider<Users>((ref) {
   final userModel = ref.watch(userManager);
   return userModel.foundUsers;
 });
+
+final typingManager = Provider<bool>((ref) {
+  final userModel = ref.watch(userManager);
+  return userModel.otherUserTyping;
+});
+
 
 final userManager = StateNotifierProvider<UserManager,UserModel>( (ref) {
   return UserManager(ref);

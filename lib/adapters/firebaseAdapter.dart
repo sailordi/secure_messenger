@@ -498,9 +498,10 @@ class FirebaseAdapter {
       return UserData.fromDb(doc.data() as Map<String, dynamic>);
   }
 
-  Future<bool> getTyping(String userId,String roodId,bool typing) async {
+  Future<bool> getTyping(String roomId) async {
+    var userId = base.userId;
     var q = await base.typingInProgress
-        .where("room",isEqualTo: roodId)
+        .where("room",isEqualTo: roomId)
         .where("user",isNotEqualTo: userId)
         .get();
 
@@ -551,7 +552,6 @@ class FirebaseAdapter {
         .where("id",isEqualTo: userId).snapshots(includeMetadataChanges: false)
         .listen( (event) { rooms(); } );
   }
-
 
   StreamSubscription requestStream({required bool sent,required UserData user,required void Function(UserData,bool) requestChange}) {
     String userId = base.userId;
